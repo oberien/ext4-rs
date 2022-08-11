@@ -1,8 +1,11 @@
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::io;
-use std::io::Read;
-use std::io::Seek;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
+use alloc::format;
+use core::convert::TryFrom;
+use acid_io as io;
+use acid_io::{Read, Seek};
+use acid_io::byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
 
 use anyhow::anyhow;
 use anyhow::bail;
@@ -10,7 +13,6 @@ use anyhow::ensure;
 use anyhow::Context;
 use anyhow::Error;
 use bitflags::bitflags;
-use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
 use positioned_io2::{Cursor, ReadAt};
 
 use crate::not_found;
@@ -80,53 +82,53 @@ where
     R: ReadAt,
 {
     let mut entire_superblock = [0u8; 1024];
-    reader.read_exact_at(1024, &mut entire_superblock)?;
+    reader.read_exact_at(1024, &mut entire_superblock).map_err(Error::msg)?;
 
     let mut inner = io::Cursor::new(&mut entire_superblock[..]);
 
     // <a cut -c 9- | fgrep ' s_' | fgrep -v ERR_ | while read ty nam comment; do printf "let %s =\n  inner.read_%s::<LittleEndian>()?; %s\n" $(echo $nam | tr -d ';') $(echo $ty | sed 's/__le/u/; s/__//') $comment; done
     //    let s_inodes_count =
-    inner.read_u32::<LittleEndian>()?; /* Inodes count */
-    let s_blocks_count_lo = inner.read_u32::<LittleEndian>()?; /* Blocks count */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Inodes count */
+    let s_blocks_count_lo = inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Blocks count */
     //    let s_r_blocks_count_lo =
-    inner.read_u32::<LittleEndian>()?; /* Reserved blocks count */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Reserved blocks count */
     //    let s_free_blocks_count_lo =
-    inner.read_u32::<LittleEndian>()?; /* Free blocks count */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Free blocks count */
     //    let s_free_inodes_count =
-    inner.read_u32::<LittleEndian>()?; /* Free inodes count */
-    let s_first_data_block = inner.read_u32::<LittleEndian>()?; /* First Data Block */
-    let s_log_block_size = inner.read_u32::<LittleEndian>()?; /* Block size */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Free inodes count */
+    let s_first_data_block = inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* First Data Block */
+    let s_log_block_size = inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Block size */
     //    let s_log_cluster_size =
-    inner.read_u32::<LittleEndian>()?; /* Allocation cluster size */
-    let s_blocks_per_group = inner.read_u32::<LittleEndian>()?; /* # Blocks per group */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Allocation cluster size */
+    let s_blocks_per_group = inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* # Blocks per group */
     //    let s_clusters_per_group =
-    inner.read_u32::<LittleEndian>()?; /* # Clusters per group */
-    let s_inodes_per_group = inner.read_u32::<LittleEndian>()?; /* # Inodes per group */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* # Clusters per group */
+    let s_inodes_per_group = inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* # Inodes per group */
     //    let s_mtime =
-    inner.read_u32::<LittleEndian>()?; /* Mount time */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Mount time */
     //    let s_wtime =
-    inner.read_u32::<LittleEndian>()?; /* Write time */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Write time */
     //    let s_mnt_count =
-    inner.read_u16::<LittleEndian>()?; /* Mount count */
+    inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* Mount count */
     //    let s_max_mnt_count =
-    inner.read_u16::<LittleEndian>()?; /* Maximal mount count */
-    let s_magic = inner.read_u16::<LittleEndian>()?; /* Magic signature */
+    inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* Maximal mount count */
+    let s_magic = inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* Magic signature */
 
     ensure!(
         EXT4_SUPER_MAGIC == s_magic,
         not_found(format!("invalid magic number: {:x}", s_magic))
     );
 
-    let s_state = inner.read_u16::<LittleEndian>()?; /* File system state */
+    let s_state = inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* File system state */
     //    let s_errors =
-    inner.read_u16::<LittleEndian>()?; /* Behaviour when detecting errors */
+    inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* Behaviour when detecting errors */
     //    let s_minor_rev_level =
-    inner.read_u16::<LittleEndian>()?; /* minor revision level */
+    inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* minor revision level */
     //    let s_lastcheck =
-    inner.read_u32::<LittleEndian>()?; /* time of last check */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* time of last check */
     //    let s_checkinterval =
-    inner.read_u32::<LittleEndian>()?; /* max. time between checks */
-    let s_creator_os = inner.read_u32::<LittleEndian>()?; /* OS */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* max. time between checks */
+    let s_creator_os = inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* OS */
 
     ensure!(
         0 == s_creator_os,
@@ -136,23 +138,23 @@ where
         ))
     );
 
-    let s_rev_level = inner.read_u32::<LittleEndian>()?; /* Revision level */
+    let s_rev_level = inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Revision level */
     //    let s_def_resuid =
-    inner.read_u16::<LittleEndian>()?; /* Default uid for reserved blocks */
+    inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* Default uid for reserved blocks */
     //    let s_def_resgid =
-    inner.read_u16::<LittleEndian>()?; /* Default gid for reserved blocks */
+    inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* Default gid for reserved blocks */
     //    let s_first_ino =
-    inner.read_u32::<LittleEndian>()?; /* First non-reserved inode */
-    let s_inode_size = inner.read_u16::<LittleEndian>()?; /* size of inode structure */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* First non-reserved inode */
+    let s_inode_size = inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* size of inode structure */
     //    let s_block_group_nr =
-    inner.read_u16::<LittleEndian>()?; /* block group # of this superblock */
-    let s_feature_compat = inner.read_u32::<LittleEndian>()?; /* compatible feature set */
+    inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* block group # of this superblock */
+    let s_feature_compat = inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* compatible feature set */
 
     let compatible_features = CompatibleFeature::from_bits_truncate(s_feature_compat);
 
     let load_xattrs = compatible_features.contains(CompatibleFeature::EXT_ATTR);
 
-    let s_feature_incompat = inner.read_u32::<LittleEndian>()?; /* incompatible feature set */
+    let s_feature_incompat = inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* incompatible feature set */
 
     let incompatible_features =
         IncompatibleFeature::from_bits(s_feature_incompat).ok_or_else(|| {
@@ -177,7 +179,7 @@ where
 
     let long_structs = incompatible_features.contains(IncompatibleFeature::SIXTY_FOUR_BIT);
 
-    let s_feature_ro_compat = inner.read_u32::<LittleEndian>()?; /* readonly-compatible feature set */
+    let s_feature_ro_compat = inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* readonly-compatible feature set */
 
     let compatible_features_read_only =
         CompatibleFeatureReadOnly::from_bits_truncate(s_feature_ro_compat);
@@ -197,47 +199,47 @@ where
     );
 
     let mut s_uuid = [0; 16];
-    inner.read_exact(&mut s_uuid)?; /* 128-bit uuid for volume */
+    inner.read_exact(&mut s_uuid).map_err(Error::msg)?; /* 128-bit uuid for volume */
     let mut s_volume_name = [0u8; 16];
-    inner.read_exact(&mut s_volume_name)?; /* volume name */
+    inner.read_exact(&mut s_volume_name).map_err(Error::msg)?; /* volume name */
     let mut s_last_mounted = [0u8; 64];
-    inner.read_exact(&mut s_last_mounted)?; /* directory where last mounted */
+    inner.read_exact(&mut s_last_mounted).map_err(Error::msg)?; /* directory where last mounted */
     //    let s_algorithm_usage_bitmap =
-    inner.read_u32::<LittleEndian>()?; /* For compression */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* For compression */
     //    let s_prealloc_blocks =
-    inner.read_u8()?; /* Nr of blocks to try to preallocate*/
+    inner.read_u8().map_err(Error::msg)?; /* Nr of blocks to try to preallocate*/
     //    let s_prealloc_dir_blocks =
-    inner.read_u8()?; /* Nr to preallocate for dirs */
+    inner.read_u8().map_err(Error::msg)?; /* Nr to preallocate for dirs */
     //    let s_reserved_gdt_blocks =
-    inner.read_u16::<LittleEndian>()?; /* Per group desc for online growth */
+    inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* Per group desc for online growth */
     let mut s_journal_uuid = [0u8; 16];
-    inner.read_exact(&mut s_journal_uuid)?; /* uuid of journal superblock */
+    inner.read_exact(&mut s_journal_uuid).map_err(Error::msg)?; /* uuid of journal superblock */
     //    let s_journal_inum =
-    inner.read_u32::<LittleEndian>()?; /* inode number of journal file */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* inode number of journal file */
     //    let s_journal_dev =
-    inner.read_u32::<LittleEndian>()?; /* device number of journal file */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* device number of journal file */
     //    let s_last_orphan =
-    inner.read_u32::<LittleEndian>()?; /* start of list of inodes to delete */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* start of list of inodes to delete */
     let mut s_hash_seed = [0u8; 4 * 4];
-    inner.read_exact(&mut s_hash_seed)?; /* HTREE hash seed */
+    inner.read_exact(&mut s_hash_seed).map_err(Error::msg)?; /* HTREE hash seed */
     //    let s_def_hash_version =
-    inner.read_u8()?; /* Default hash version to use */
+    inner.read_u8().map_err(Error::msg)?; /* Default hash version to use */
     //    let s_jnl_backup_type =
-    inner.read_u8()?;
-    let s_desc_size = inner.read_u16::<LittleEndian>()?; /* size of group descriptor */
+    inner.read_u8().map_err(Error::msg)?;
+    let s_desc_size = inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* size of group descriptor */
     //    let s_default_mount_opts =
-    inner.read_u32::<LittleEndian>()?;
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?;
     //    let s_first_meta_bg =
-    inner.read_u32::<LittleEndian>()?; /* First metablock block group */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* First metablock block group */
     //    let s_mkfs_time =
-    inner.read_u32::<LittleEndian>()?; /* When the filesystem was created */
+    inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* When the filesystem was created */
     let mut s_jnl_blocks = [0; 17 * 4];
-    inner.read_exact(&mut s_jnl_blocks)?; /* Backup of the journal inode */
+    inner.read_exact(&mut s_jnl_blocks).map_err(Error::msg)?; /* Backup of the journal inode */
 
     let s_blocks_count_hi = if !long_structs {
         None
     } else {
-        Some(inner.read_u32::<LittleEndian>()?) /* Blocks count */
+        Some(inner.read_u32::<LittleEndian>().map_err(Error::msg)?) /* Blocks count */
     };
     ////    let s_r_blocks_count_hi =
     //        if !long_structs { None } else {
@@ -263,8 +265,8 @@ where
     // TODO: check s_checksum_type == 1 (crc32c)
 
     if has_checksums {
-        inner.seek(io::SeekFrom::End(-4))?;
-        let s_checksum = inner.read_u32::<LittleEndian>()?;
+        inner.seek(io::SeekFrom::End(-4)).map_err(Error::msg)?;
+        let s_checksum = inner.read_u32::<LittleEndian>().map_err(Error::msg)?;
         let expected = ext4_style_crc32c_le(!0, &inner.into_inner()[..(1024 - 4)]);
         ensure!(
             s_checksum == expected,
@@ -330,7 +332,7 @@ where
     };
 
     let mut grouper = Cursor::new(&mut reader);
-    grouper.seek(io::SeekFrom::Start(u64::from(group_table_pos)))?;
+    grouper.seek(io::SeekFrom::Start(u64::from(group_table_pos))).map_err(Error::msg)?;
     let blocks_count = (u64::from(s_blocks_count_lo)
         + (u64::from(s_blocks_count_hi.unwrap_or(0)) << 32)
         - u64::from(s_first_data_block)
@@ -416,7 +418,7 @@ where
     } else {
         read_le16(&data[0x80..0x82])
     };
-    let inode_end = INODE_BASE_LEN + usize::try_from(i_extra_isize)?;
+    let inode_end = INODE_BASE_LEN + usize::try_from(i_extra_isize).map_err(Error::msg)?;
 
     ensure!(
         inode_end <= data.len(),
@@ -499,7 +501,7 @@ where
     }
 
     // extended attributes after the inode
-    let mut xattrs = HashMap::new();
+    let mut xattrs = BTreeMap::new();
 
     if inode_end + 4 <= data.len() && XATTR_MAGIC == read_le32(&data[inode_end..(inode_end + 4)]) {
         let table_start = &data[inode_end + 4..];
@@ -516,7 +518,7 @@ where
     let stat = crate::Stat {
         extracted_type: crate::FileType::from_mode(i_mode).ok_or_else(|| {
             unsupported_feature(format!("unexpected file type in mode: {:b}", i_mode))
-        })?,
+        }).map_err(Error::msg)?,
         file_mode: i_mode & 0b111_111_111_111,
         uid: u32::from(i_uid) | (u32::from(l_i_uid_high) << 16),
         gid: u32::from(i_gid) | (u32::from(l_i_gid_high) << 16),
@@ -533,14 +535,14 @@ where
         stat,
         flags: crate::InodeFlags::from_bits(i_flags).ok_or_else(|| {
             unsupported_feature(format!("unrecognised inode flags: {:b}", i_flags))
-        })?,
+        }).map_err(Error::msg)?,
         core: i_block,
         checksum_prefix,
     })
 }
 
 fn xattr_block(
-    xattrs: &mut HashMap<String, Vec<u8>>,
+    xattrs: &mut BTreeMap<String, Vec<u8>>,
     mut data: Vec<u8>,
     uuid_checksum: Option<u32>,
     block_number: u64,
@@ -593,7 +595,7 @@ fn xattr_block(
 }
 
 fn read_xattrs(
-    xattrs: &mut HashMap<String, Vec<u8>>,
+    xattrs: &mut BTreeMap<String, Vec<u8>>,
     mut reading: &[u8],
     block_offset_start: &[u8],
 ) -> Result<(), Error> {
@@ -615,7 +617,7 @@ fn read_xattrs(
         let e_value_size = read_le32(&reading[0x08..0x0C]);
         //        let e_hash              = read_le32(&reading[0x0C..0x10]);
 
-        let end_of_name = 0x10 + usize::try_from(e_name_len)?;
+        let end_of_name = 0x10 + usize::try_from(e_name_len).map_err(Error::msg)?;
 
         ensure!(
             reading.len() > end_of_name,
@@ -639,11 +641,11 @@ fn read_xattrs(
                     e_name_prefix_magic
                 ))),
             },
-            std::str::from_utf8(name_suffix).with_context(|| anyhow!("name is invalid utf-8"))?
+            core::str::from_utf8(name_suffix).map_err(Error::msg).with_context(|| anyhow!("name is invalid utf-8"))?
         );
 
-        let start = usize::try_from(e_value_offset)?;
-        let end = start + usize::try_from(e_value_size)?;
+        let start = usize::try_from(e_value_offset).map_err(Error::msg)?;
+        let end = start + usize::try_from(e_value_size).map_err(Error::msg)?;
 
         ensure!(
             start <= block_offset_start.len() && end <= block_offset_start.len(),

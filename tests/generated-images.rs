@@ -9,7 +9,7 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::process::Stdio;
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use positioned_io2::ReadAt;
 use tempfile::NamedTempFile;
 use tempfile::TempDir;
@@ -19,7 +19,7 @@ fn all_types() -> Result<()> {
     let mut files_successfully_processed = 0u64;
 
     for image_name in open_assets()?.entries()? {
-        let mut img = fs::File::open(image_name)?;
+        let mut img = fs::File::open(image_name).map_err(Error::msg)?;
 
         let partitions =
             bootsector::list_partitions(&mut img, &bootsector::Options::default()).unwrap();
@@ -46,7 +46,7 @@ fn all_types() -> Result<()> {
                     if ext4::FileType::RegularFile == inode.stat.extracted_type {
                         let expected_size = usize::try_from(inode.stat.size).unwrap();
                         let mut buf = Vec::with_capacity(expected_size);
-                        fs.open(inode)?.read_to_end(&mut buf)?;
+                        fs.open(inode)?.read_to_end(&mut buf).map_err(Error::msg)?;
                         assert_eq!(expected_size, buf.len());
                     }
 
@@ -100,7 +100,7 @@ struct Assets {
 }
 
 fn open_assets() -> Result<Assets> {
-    let tempdir = TempDir::new()?;
+    let tempdir = TempDir::new().map_err(Error::msg)?;
     let mut tar = std::process::Command::new("tar")
         .args(&[
             OsStr::new("-C"),
@@ -108,22 +108,22 @@ fn open_assets() -> Result<Assets> {
             OsStr::new("-xz"),
         ])
         .stdin(Stdio::piped())
-        .spawn()?;
+        .spawn().map_err(Error::msg)?;
 
     io::copy(
         &mut io::Cursor::new(&include_bytes!("../scripts/generate-images/images.tgz")[..]),
         &mut tar.stdin.as_mut().expect("configured above"),
-    )?;
+    ).map_err(Error::msg)?;
 
-    assert!(tar.wait()?.success());
+    assert!(tar.wait().map_err(Error::msg)?.success());
 
     Ok(Assets { tempdir })
 }
 
 impl Assets {
     fn entries(&self) -> Result<Vec<PathBuf>> {
-        fs::read_dir(self.tempdir.path())?
-            .map(|e| -> Result<PathBuf> { Ok(e?.path()) })
+        fs::read_dir(self.tempdir.path()).map_err(Error::msg)?
+            .map(|e| -> Result<PathBuf> { Ok(e.map_err(Error::msg)?.path()) })
             .collect()
     }
 }

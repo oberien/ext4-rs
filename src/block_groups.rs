@@ -1,9 +1,11 @@
-use std::convert::TryFrom;
-use std::io;
+use alloc::format;
+use alloc::vec::Vec;
+use core::convert::TryFrom;
+use acid_io as io;
+use acid_io::byteorder::{LittleEndian, ReadBytesExt};
 
 use anyhow::ensure;
 use anyhow::Error;
-use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::assumption_failed;
 use crate::not_found;
@@ -37,60 +39,60 @@ impl BlockGroups {
     where
         R: io::Read + io::Seek,
     {
-        let blocks_count = usize::try_from(blocks_count)?;
+        let blocks_count = usize::try_from(blocks_count).map_err(Error::msg)?;
 
         let mut groups = Vec::with_capacity(blocks_count);
 
         for block in 0..blocks_count {
             //            let bg_block_bitmap_lo =
-            inner.read_u32::<LittleEndian>()?; /* Blocks bitmap block */
+            inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Blocks bitmap block */
             //            let bg_inode_bitmap_lo =
-            inner.read_u32::<LittleEndian>()?; /* Inodes bitmap block */
-            let bg_inode_table_lo = inner.read_u32::<LittleEndian>()?; /* Inodes table block */
+            inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Inodes bitmap block */
+            let bg_inode_table_lo = inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Inodes table block */
             //            let bg_free_blocks_count_lo =
-            inner.read_u16::<LittleEndian>()?; /* Free blocks count */
-            let bg_free_inodes_count_lo = inner.read_u16::<LittleEndian>()?; /* Free inodes count */
+            inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* Free blocks count */
+            let bg_free_inodes_count_lo = inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* Free inodes count */
             //            let bg_used_dirs_count_lo =
-            inner.read_u16::<LittleEndian>()?; /* Directories count */
-            let bg_flags = inner.read_u16::<LittleEndian>()?; /* EXT4_BG_flags (INODE_UNINIT, etc) */
+            inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* Directories count */
+            let bg_flags = inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* EXT4_BG_flags (INODE_UNINIT, etc) */
             //            let bg_exclude_bitmap_lo =
-            inner.read_u32::<LittleEndian>()?; /* Exclude bitmap for snapshots */
+            inner.read_u32::<LittleEndian>().map_err(Error::msg)?; /* Exclude bitmap for snapshots */
             //            let bg_block_bitmap_csum_lo =
-            inner.read_u16::<LittleEndian>()?; /* crc32c(s_uuid+grp_num+bbitmap) LE */
+            inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* crc32c(s_uuid+grp_num+bbitmap) LE */
             //            let bg_inode_bitmap_csum_lo =
-            inner.read_u16::<LittleEndian>()?; /* crc32c(s_uuid+grp_num+ibitmap) LE */
+            inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* crc32c(s_uuid+grp_num+ibitmap) LE */
             //            let bg_itable_unused_lo =
-            inner.read_u16::<LittleEndian>()?; /* Unused inodes count */
+            inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* Unused inodes count */
             //            let bg_checksum =
-            inner.read_u16::<LittleEndian>()?; /* crc16(sb_uuid+group+desc) */
+            inner.read_u16::<LittleEndian>().map_err(Error::msg)?; /* crc16(sb_uuid+group+desc) */
 
             //            let bg_block_bitmap_hi =
             if s_desc_size < 4 {
                 None
             } else {
-                Some(inner.read_u32::<LittleEndian>()?) /* Blocks bitmap block MSB */
+                Some(inner.read_u32::<LittleEndian>().map_err(Error::msg)?) /* Blocks bitmap block MSB */
             };
             //            let bg_inode_bitmap_hi =
             if s_desc_size < 4 + 4 {
                 None
             } else {
-                Some(inner.read_u32::<LittleEndian>()?) /* Inodes bitmap block MSB */
+                Some(inner.read_u32::<LittleEndian>().map_err(Error::msg)?) /* Inodes bitmap block MSB */
             };
             let bg_inode_table_hi = if s_desc_size < 4 + 4 + 4 {
                 None
             } else {
-                Some(inner.read_u32::<LittleEndian>()?) /* Inodes table block MSB */
+                Some(inner.read_u32::<LittleEndian>().map_err(Error::msg)?) /* Inodes table block MSB */
             };
             //            let bg_free_blocks_count_hi =
             if s_desc_size < 4 + 4 + 4 + 2 {
                 None
             } else {
-                Some(inner.read_u16::<LittleEndian>()?) /* Free blocks count MSB */
+                Some(inner.read_u16::<LittleEndian>().map_err(Error::msg)?) /* Free blocks count MSB */
             };
             let bg_free_inodes_count_hi = if s_desc_size < 4 + 4 + 4 + 2 + 2 {
                 None
             } else {
-                Some(inner.read_u16::<LittleEndian>()?) /* Free inodes count MSB */
+                Some(inner.read_u16::<LittleEndian>().map_err(Error::msg)?) /* Free inodes count MSB */
             };
 
             //          let bg_used_dirs_count_hi =
@@ -104,7 +106,7 @@ impl BlockGroups {
             //          let bg_inode_bitmap_csum_hi =
             //              inner.read_u16::<LittleEndian>()?; /* crc32c(s_uuid+grp_num+ibitmap) BE */
             if s_desc_size > 16 + 32 {
-                inner.seek(io::SeekFrom::Current(i64::from(s_desc_size - 32 - 16)))?;
+                inner.seek(io::SeekFrom::Current(i64::from(s_desc_size - 32 - 16))).map_err(Error::msg)?;
             }
 
             let inode_table_block =
@@ -150,7 +152,7 @@ impl BlockGroups {
 
         let inode = inode - 1;
         let group_number = inode / self.inodes_per_group;
-        let group = &self.groups[usize::try_from(group_number)?];
+        let group = &self.groups[usize::try_from(group_number).map_err(Error::msg)?];
         let inode_index_in_group = inode % self.inodes_per_group;
         ensure!(
             inode_index_in_group < group.max_inode_number,

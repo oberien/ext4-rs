@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
 /*!
 This crate can load ext4 filesystems, letting you read metadata
 and files from them.
@@ -17,18 +19,22 @@ file on the filesystem. You can grant yourself temporary access with
 `sudo setfacl -m u:${USER}:r /dev/sda1`, if you so fancy. This will be lost at reboot.
 */
 
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::io;
-use std::io::Read;
-use std::io::Seek;
+extern crate alloc;
+
+use alloc::collections::BTreeMap;
+use alloc::{format, vec};
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::convert::TryFrom;
+use acid_io as io;
+use acid_io::{Read, Seek};
+use acid_io::byteorder::{LittleEndian, ReadBytesExt};
 
 use anyhow::anyhow;
 use anyhow::ensure;
 use anyhow::Context;
 use anyhow::Error;
 use bitflags::bitflags;
-use byteorder::{LittleEndian, ReadBytesExt};
 pub use positioned_io2::ReadAt;
 
 mod block_groups;
@@ -39,7 +45,7 @@ pub mod parse;
 
 use crate::extents::TreeReader;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror_no_std::Error)]
 pub enum ParseError {
     /// The filesystem doesn't meet the code's expectations;
     /// maybe the code is wrong, maybe the filesystem is corrupt.
@@ -180,7 +186,7 @@ pub struct Stat {
     pub mtime: Time,
     pub btime: Option<Time>,
     pub link_count: u16,
-    pub xattrs: HashMap<String, Vec<u8>>,
+    pub xattrs: BTreeMap<String, Vec<u8>>,
 }
 
 const INODE_CORE_SIZE: usize = 4 * 15;
@@ -311,8 +317,8 @@ where
 
     fn load_inode_bytes(&self, inode: u32) -> Result<Vec<u8>, Error> {
         let offset = self.groups.index_of(inode)?;
-        let mut data = vec![0u8; usize::try_from(self.groups.inode_size)?];
-        self.inner.read_exact_at(offset, &mut data)?;
+        let mut data = vec![0u8; usize::try_from(self.groups.inode_size).map_err(Error::msg)?];
+        self.inner.read_exact_at(offset, &mut data).map_err(Error::msg)?;
         Ok(data)
     }
 
@@ -397,10 +403,10 @@ where
             if let Some(en) = entries.into_iter().find(|entry| entry.name == name) {
                 Ok(en)
             } else {
-                Err(not_found(format!("component {} isn't there", name)).into())
+                Err(Error::msg(not_found(format!("component {} isn't there", name))))
             }
         } else {
-            Err(not_found(format!("component {} isn't a directory", name)).into())
+            Err(Error::msg(not_found(format!("component {} isn't a directory", name))))
         }
     }
 
@@ -420,8 +426,8 @@ where
     R: ReadAt,
 {
     let offset = block * u64::from(block_size);
-    let mut data = vec![0u8; usize::try_from(block_size)?];
-    inner.read_exact_at(offset, &mut data)?;
+    let mut data = vec![0u8; usize::try_from(block_size).map_err(Error::msg)?];
+    inner.read_exact_at(offset, &mut data).map_err(Error::msg)?;
     Ok(data)
 }
 
@@ -451,7 +457,7 @@ impl Inode {
 
             FileType::Directory => Enhanced::Directory(self.read_directory(inner)?),
             FileType::SymbolicLink => {
-                Enhanced::SymbolicLink(if self.stat.size < u64::try_from(INODE_CORE_SIZE)? {
+                Enhanced::SymbolicLink(if self.stat.size < u64::try_from(INODE_CORE_SIZE).map_err(Error::msg)? {
                     ensure!(
                         self.flags.is_empty(),
                         unsupported_feature(format!(
@@ -459,7 +465,8 @@ impl Inode {
                             self.flags
                         ))
                     );
-                    std::str::from_utf8(&self.core[0..usize::try_from(self.stat.size)?])
+                    core::str::from_utf8(&self.core[0..usize::try_from(self.stat.size).map_err(Error::msg)?])
+                        .map_err(Error::msg)
                         .with_context(|| anyhow!("short symlink is invalid utf-8"))?
                         .to_string()
                 } else {
@@ -470,7 +477,8 @@ impl Inode {
                             self.flags
                         ))
                     );
-                    std::str::from_utf8(&self.load_all(inner)?)
+                    core::str::from_utf8(&self.load_all(inner)?)
+                        .map_err(Error::msg)
                         .with_context(|| anyhow!("long symlink is invalid utf-8"))?
                         .to_string()
                 })
@@ -490,10 +498,10 @@ impl Inode {
     where
         R: ReadAt,
     {
-        let size = usize::try_from(self.stat.size)?;
+        let size = usize::try_from(self.stat.size).map_err(Error::msg)?;
         let mut ret = vec![0u8; size];
 
-        self.reader(inner)?.read_exact(&mut ret)?;
+        self.reader(inner)?.read_exact(&mut ret).map_err(Error::msg)?;
 
         Ok(ret)
     }
@@ -522,8 +530,8 @@ impl Inode {
         let mut cursor = io::Cursor::new(data);
         let mut read = 0usize;
         loop {
-            let child_inode = cursor.read_u32::<LittleEndian>()?;
-            let rec_len = cursor.read_u16::<LittleEndian>()?;
+            let child_inode = cursor.read_u32::<LittleEndian>().map_err(Error::msg)?;
+            let rec_len = cursor.read_u16::<LittleEndian>().map_err(Error::msg)?;
 
             ensure!(
                 rec_len > 8,
@@ -533,12 +541,12 @@ impl Inode {
                 ))
             );
 
-            let name_len = cursor.read_u8()?;
-            let file_type = cursor.read_u8()?;
-            let mut name = vec![0u8; usize::try_from(name_len)?];
-            cursor.read_exact(&mut name)?;
+            let name_len = cursor.read_u8().map_err(Error::msg)?;
+            let file_type = cursor.read_u8().map_err(Error::msg)?;
+            let mut name = vec![0u8; usize::try_from(name_len).map_err(Error::msg)?];
+            cursor.read_exact(&mut name).map_err(Error::msg)?;
             if 0 != child_inode {
-                let name = std::str::from_utf8(&name)
+                let name = core::str::from_utf8(&name)
                     .map_err(|e| parse_error(format!("invalid utf-8 in file name: {}", e)))?;
 
                 dirs.push(DirEntry {
@@ -549,13 +557,13 @@ impl Inode {
                             "unexpected file type in directory: {}",
                             file_type
                         ))
-                    })?,
+                    }).map_err(Error::msg)?,
                 });
             } else if 12 == rec_len && 0 == name_len && 0xDE == file_type {
                 // Magic entry representing the end of the list
 
                 if let Some(checksum_prefix) = self.checksum_prefix {
-                    let expected = cursor.read_u32::<LittleEndian>()?;
+                    let expected = cursor.read_u32::<LittleEndian>().map_err(Error::msg)?;
                     let computed =
                         parse::ext4_style_crc32c_le(checksum_prefix, &cursor.into_inner()[0..read]);
                     ensure!(
@@ -572,9 +580,9 @@ impl Inode {
 
             cursor.seek(io::SeekFrom::Current(
                 i64::from(rec_len) - i64::from(name_len) - 4 - 2 - 1 - 1,
-            ))?;
+            )).map_err(Error::msg)?;
 
-            read += usize::try_from(rec_len)?;
+            read += usize::try_from(rec_len).map_err(Error::msg)?;
             if read >= total_len {
                 ensure!(
                     read == total_len,
@@ -629,22 +637,22 @@ fn load_maj_min(core: [u8; INODE_CORE_SIZE]) -> (u16, u32) {
 
 #[inline]
 fn read_le16(from: &[u8]) -> u16 {
-    use byteorder::ByteOrder;
+    use acid_io::byteorder::ByteOrder;
     LittleEndian::read_u16(from)
 }
 
 #[inline]
 fn read_le32(from: &[u8]) -> u32 {
-    use byteorder::ByteOrder;
+    use acid_io::byteorder::ByteOrder;
     LittleEndian::read_u32(from)
 }
 
 #[inline]
 fn read_lei32(from: &[u8]) -> i32 {
-    use byteorder::ByteOrder;
+    use acid_io::byteorder::ByteOrder;
     LittleEndian::read_i32(from)
 }
 
 fn parse_error(msg: String) -> Error {
-    assumption_failed(msg).into()
+    Error::msg(assumption_failed(msg))
 }

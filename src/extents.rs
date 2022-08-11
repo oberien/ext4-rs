@@ -1,5 +1,7 @@
-use std::convert::TryFrom;
-use std::io;
+use core::convert::TryFrom;
+use alloc::format;
+use alloc::vec::Vec;
+use acid_io as io;
 
 use anyhow::ensure;
 use anyhow::Error;
@@ -77,7 +79,7 @@ fn find_part(part: u32, extents: &[Extent]) -> FoundPart {
         }
     }
 
-    FoundPart::Sparse(std::u32::MAX)
+    FoundPart::Sparse(core::u32::MAX)
 }
 
 impl<R> io::Read for TreeReader<R>
@@ -100,8 +102,8 @@ where
                     (block_size * u64::from(wanted_block - extent.part)) + read_of_this_block;
                 let remaining_bytes_in_extent =
                     (u64::from(extent.len) * block_size) - bytes_through_extent;
-                let to_read = std::cmp::min(remaining_bytes_in_extent, buf.len() as u64) as usize;
-                let to_read = std::cmp::min(to_read as u64, self.len - self.pos) as usize;
+                let to_read = core::cmp::min(remaining_bytes_in_extent, buf.len() as u64) as usize;
+                let to_read = core::cmp::min(to_read as u64, self.len - self.pos) as usize;
                 let offset = extent.start * block_size + bytes_through_extent;
                 let read = self.inner.read_at(offset, &mut buf[0..to_read])?;
                 self.pos += u64::try_from(read).expect("infallible u64 conversion");
@@ -109,8 +111,8 @@ where
             }
             FoundPart::Sparse(max) => {
                 let max_bytes = u64::from(max) * block_size;
-                let read = std::cmp::min(max_bytes, buf.len() as u64) as usize;
-                let read = std::cmp::min(read as u64, self.len - self.pos) as usize;
+                let read = core::cmp::min(max_bytes, buf.len() as u64) as usize;
+                let read = core::cmp::min(read as u64, self.len - self.pos) as usize;
                 zero(&mut buf[0..read]);
                 self.pos += u64::try_from(read).expect("infallible u64 conversion");
                 Ok(read)
@@ -260,13 +262,15 @@ where
 }
 
 fn zero(buf: &mut [u8]) {
-    unsafe { std::ptr::write_bytes(buf.as_mut_ptr(), 0u8, buf.len()) }
+    unsafe { core::ptr::write_bytes(buf.as_mut_ptr(), 0u8, buf.len()) }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-    use std::io::Read;
+    use alloc::vec;
+    use alloc::vec::Vec;
+    use core::convert::TryFrom;
+    use acid_io::Read;
 
     use crate::extents::Extent;
     use crate::extents::TreeReader;
