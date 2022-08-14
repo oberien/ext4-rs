@@ -17,8 +17,8 @@ edition = "2021"
 [dependencies]
 anyhow = {version = "1", default-features = false }
 bitflags = "1"
-crc = "1"
-positioned-io2 = "0.3"
+crc = "3"
+positioned-io2 = { version = "0.3", default-features = false }
 thiserror-no-std = "2.0.2"
 acid_io = { version = "0.1.0", default-features = false, features = ["byteorder"] }
 
@@ -28,7 +28,8 @@ tempfile = "3"
 
 [features]
 default = ["std"]
-std = ["acid_io/std", "thiserror-no-std/std", "anyhow/std"]
+std = ["acid_io/std", "thiserror-no-std/std", "anyhow/std", "positioned-io2/std"]
 
 [patch.crates-io]
 positioned-io2 = { git = "https://github.com/oberien/positioned-io2", branch = "no_std" }
+acid_io = { git = "https://github.com/oberien/acid_io" }

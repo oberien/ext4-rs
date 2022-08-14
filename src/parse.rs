@@ -668,7 +668,11 @@ fn read_xattrs(
 
 /// This is what the function in the ext4 code does, based on its results. I'm so sorry.
 pub fn ext4_style_crc32c_le(seed: u32, buf: &[u8]) -> u32 {
-    crc::crc32::update(seed ^ (!0), &crc::crc32::CASTAGNOLI_TABLE, buf) ^ (!0u32)
+    let seed = seed.reverse_bits();
+    let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
+    let mut digest = crc.digest_with_initial(seed);
+    digest.update(buf);
+    digest.finalize() ^ (!0u32)
 }
 
 #[cfg(test)]
