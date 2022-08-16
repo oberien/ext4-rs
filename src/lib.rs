@@ -210,6 +210,7 @@ pub struct Inode {
 pub struct SuperBlock<R> {
     inner: R,
     load_xattrs: bool,
+    pub uuid: [u8; 16],
     /// All* checksums are computed after concatenation with the UUID, so we keep that.
     uuid_checksum: Option<u32>,
     groups: block_groups::BlockGroups,
